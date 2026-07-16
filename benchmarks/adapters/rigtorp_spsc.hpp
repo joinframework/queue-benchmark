@@ -3,22 +3,29 @@
 #include <rigtorp/SPSCQueue.h>
 #include <string_view>
 
-template<typename T>
+template <typename T>
 class RigtorpSPSC
 {
 public:
     static constexpr std::string_view name = "rigtorp::SPSCQueue";
 
-    explicit RigtorpSPSC(std::size_t capacity) : q_(capacity) {}
-
-    bool push(T val) { return q_.try_push(val); }
-
-    bool pop(T& val)
+    explicit RigtorpSPSC (std::size_t capacity)
+    : q_ (capacity)
     {
-        T* ptr = q_.front();
-        if (!ptr) return false;
+    }
+
+    bool push (T val)
+    {
+        return q_.try_push (val);
+    }
+
+    bool pop (T& val)
+    {
+        T* ptr = q_.front ();
+        if (!ptr)
+            return false;
         val = *ptr;
-        q_.pop();
+        q_.pop ();
         return true;
     }
 

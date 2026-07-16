@@ -3,7 +3,7 @@ set -e
 
 BUILD_DIR="${BUILD_DIR:-build}"
 RESULTS_DIR="results"
-REPETITIONS="${REPETITIONS:-3}"
+REPETITIONS="${REPETITIONS:-10}"
 
 echo "=== Build ==="
 cmake -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release
@@ -21,6 +21,7 @@ run_bench() {
             --benchmark_format=json \
             --benchmark_out="$out" \
             --benchmark_repetitions="$REPETITIONS" \
+            --benchmark_min_warmup_time=0.1 \
             --benchmark_report_aggregates_only=true \
             --benchmark_counters_tabular=true
     fi

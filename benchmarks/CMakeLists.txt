@@ -11,10 +11,6 @@ function(add_queue_bench target source)
         SPSCQueue::SPSCQueue
         Threads::Threads
     )
-    if(folly_FOUND)
-        target_link_libraries(${target} PRIVATE Folly::folly)
-        target_compile_definitions(${target} PRIVATE HAVE_FOLLY)
-    endif()
     target_compile_options(${target} PRIVATE -Wall -Wextra)
 endfunction()
 

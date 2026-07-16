@@ -12,11 +12,7 @@ endif()
 add_compile_options(-march=native)
 
 find_package(Threads REQUIRED)
-find_package(folly QUIET)
-if(folly_FOUND)
-    message(STATUS "Folly found — Folly MPMC benchmarks enabled")
-else()
-    message(STATUS "Folly not found — install libfolly-dev to enable Folly benchmarks")
-endif()
+
 include(cmake/deps.cmake)
+
 add_subdirectory(benchmarks)

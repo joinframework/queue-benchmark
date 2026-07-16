@@ -9,97 +9,117 @@
 #include <benchmark/benchmark.h>
 
 #include "adapters/join_mpsc.hpp"
+#include "adapters/join_shm_mpsc.hpp"
 #include "adapters/moodycamel_mpsc.hpp"
 #include "common/utils.hpp"
 
 static constexpr std::size_t kNumLatencyItems = 100'000;
 
-template<typename Adapter>
-static void BM_MPSC_Latency(benchmark::State& state)
+template <typename Adapter>
+static void BM_MPSC_Latency (benchmark::State& state)
 {
-    const int         num_producers     = static_cast<int>(state.range(0));
-    const std::size_t capacity          = static_cast<std::size_t>(state.range(1));
-    const std::size_t items_per_producer = kNumLatencyItems / static_cast<std::size_t>(num_producers);
-    const std::size_t total_items        = items_per_producer * static_cast<std::size_t>(num_producers);
+    const int num_producers = static_cast<int> (state.range (0));
+    const std::size_t capacity = static_cast<std::size_t> (state.range (1));
+    const std::size_t items_per_producer = kNumLatencyItems / static_cast<std::size_t> (num_producers);
+    const std::size_t total_items = items_per_producer * static_cast<std::size_t> (num_producers);
 
     std::vector<std::int64_t> latencies;
-    latencies.reserve(total_items);
+    latencies.reserve (total_items);
 
-    for (auto _ : state) {
-        latencies.clear();
+    for (auto _ : state)
+    {
+        latencies.clear ();
 
-        Adapter q(capacity);
-        std::barrier<> ready(num_producers + 1 + 1);
-        std::barrier<> go   (num_producers + 1 + 1);
+        Adapter q (capacity);
+        std::barrier<> ready (num_producers + 1 + 1);
+        std::barrier<> go (num_producers + 1 + 1);
 
         std::vector<std::thread> producers;
-        producers.reserve(num_producers);
-        for (int p = 0; p < num_producers; ++p) {
-            producers.emplace_back([&, p] {
-                pin_bench_thread(p);
-                ready.arrive_and_wait();
-                go.arrive_and_wait();
-                for (std::size_t i = 0; i < items_per_producer; ++i) {
-                    std::int64_t ts = static_cast<std::int64_t>(rdtsc());
-                    while (!q.push(ts)) cpu_pause();
+        producers.reserve (num_producers);
+        for (int p = 0; p < num_producers; ++p)
+        {
+            producers.emplace_back ([&, p] {
+                pin_bench_thread (p);
+                ready.arrive_and_wait ();
+                go.arrive_and_wait ();
+                for (std::size_t i = 0; i < items_per_producer; ++i)
+                {
+                    std::int64_t ts = static_cast<std::int64_t> (rdtsc ());
+                    while (!q.push (ts))
+                        cpu_pause ();
                 }
             });
         }
 
-        std::thread consumer([&] {
-            pin_bench_thread(num_producers);
-            ready.arrive_and_wait();
-            go.arrive_and_wait();
+        std::thread consumer ([&] {
+            pin_bench_thread (num_producers);
+            ready.arrive_and_wait ();
+            go.arrive_and_wait ();
             std::int64_t ts;
             std::size_t count = 0;
-            while (count < total_items) {
-                if (q.pop(ts)) {
-                    latencies.push_back(cycles_to_ns(rdtsc() - static_cast<std::uint64_t>(ts)));
+            while (count < total_items)
+            {
+                if (q.pop (ts))
+                {
+                    latencies.push_back (cycles_to_ns (rdtsc () - static_cast<std::uint64_t> (ts)));
                     ++count;
-                } else {
-                    cpu_pause();
+                }
+                else
+                {
+                    cpu_pause ();
                 }
             }
         });
 
-        ready.arrive_and_wait();
-        go.arrive_and_wait();
+        ready.arrive_and_wait ();
+        go.arrive_and_wait ();
 
-        for (auto& t : producers) t.join();
-        consumer.join();
+        for (auto& t : producers)
+            t.join ();
+        consumer.join ();
     }
 
-    if (!latencies.empty()) {
-        std::sort(latencies.begin(), latencies.end());
-        const auto n    = static_cast<std::size_t>(latencies.size());
-        const double mean = static_cast<double>(
-            std::accumulate(latencies.begin(), latencies.end(), std::int64_t{0})) / n;
+    if (!latencies.empty ())
+    {
+        std::sort (latencies.begin (), latencies.end ());
+        const auto n = static_cast<std::size_t> (latencies.size ());
+        const double mean =
+            static_cast<double> (std::accumulate (latencies.begin (), latencies.end (), std::int64_t{0})) / n;
 
-        state.counters["lat_mean_ns"] = benchmark::Counter(mean);
-        state.counters["lat_p50_ns"]  = benchmark::Counter(
-            static_cast<double>(latencies[n * 50 / 100]));
-        state.counters["lat_p99_ns"]  = benchmark::Counter(
-            static_cast<double>(latencies[n * 99 / 100]));
+        state.counters["lat_min_ns"] = benchmark::Counter (static_cast<double> (latencies.front ()));
+        state.counters["lat_mean_ns"] = benchmark::Counter (mean);
+        state.counters["lat_max_ns"] = benchmark::Counter (static_cast<double> (latencies.back ()));
+        state.counters["lat_p50_ns"] = benchmark::Counter (static_cast<double> (latencies[n * 50 / 100]));
+        state.counters["lat_p90_ns"] = benchmark::Counter (static_cast<double> (latencies[n * 90 / 100]));
+        state.counters["lat_p99_ns"] = benchmark::Counter (static_cast<double> (latencies[n * 99 / 100]));
     }
 
-    state.SetItemsProcessed(state.iterations() * static_cast<std::int64_t>(total_items));
-    state.SetLabel(std::string(Adapter::name));
+    state.SetItemsProcessed (state.iterations () * static_cast<std::int64_t> (total_items));
+    state.SetLabel (std::string (Adapter::name));
 }
 
-BENCHMARK(BM_MPSC_Latency<MoodycamelMPSC<std::int64_t>>)
-    ->Name("MPSC/Latency/Moodycamel")
-    ->Args({2, 4096})
-    ->Args({4, 4096})
-    ->Args({8, 4096})
-    ->UseRealTime()
-    ->MinTime(0.5);
+BENCHMARK (BM_MPSC_Latency<MoodycamelMPSC<std::int64_t>>)
+    ->Name ("MPSC/Latency/Moodycamel")
+    ->Args ({2, 4096})
+    ->Args ({4, 4096})
+    ->Args ({8, 4096})
+    ->UseRealTime ()
+    ->MinTime (0.5);
 
-BENCHMARK(BM_MPSC_Latency<JoinMPSC<std::int64_t>>)
-    ->Name("MPSC/Latency/Join")
-    ->Args({2, 4096})
-    ->Args({4, 4096})
-    ->Args({8, 4096})
-    ->UseRealTime()
-    ->MinTime(0.5);
+BENCHMARK (BM_MPSC_Latency<JoinMPSC<std::int64_t>>)
+    ->Name ("MPSC/Latency/Join (Local)")
+    ->Args ({2, 4096})
+    ->Args ({4, 4096})
+    ->Args ({8, 4096})
+    ->UseRealTime ()
+    ->MinTime (0.5);
 
-BENCHMARK_MAIN();
+BENCHMARK (BM_MPSC_Latency<JoinShmMPSC<std::int64_t>>)
+    ->Name ("MPSC/Latency/Join (Shm)")
+    ->Args ({2, 4096})
+    ->Args ({4, 4096})
+    ->Args ({8, 4096})
+    ->UseRealTime ()
+    ->MinTime (0.5);
+
+BENCHMARK_MAIN ();

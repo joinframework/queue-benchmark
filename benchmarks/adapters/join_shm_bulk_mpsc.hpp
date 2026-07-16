@@ -1,18 +1,25 @@
 #pragma once
 
+#include "adapters/join_shm_name.hpp"
 #include <join/queue.hpp>
 #include <cstddef>
 #include <string_view>
 
 template <typename T>
-class JoinBulkSPSC
+class JoinShmBulkMPSC
 {
 public:
-    static constexpr std::string_view name = "join::LocalMem::Spsc::Queue";
+    static constexpr std::string_view name = "join::ShmMem::Mpsc::Queue";
 
-    explicit JoinBulkSPSC (std::size_t cap)
-    : q_ (cap * sizeof (T) * 2)
+    explicit JoinShmBulkMPSC (std::size_t cap)
+    : name_ (next_join_shm_name ())
+    , q_ (cap * sizeof (T) * 2, name_)
     {
+    }
+
+    ~JoinShmBulkMPSC ()
+    {
+        join::ShmMem::unlink (name_);
     }
 
     std::size_t push_bulk (const T* items, std::size_t count)
@@ -28,5 +35,6 @@ public:
     }
 
 private:
-    join::LocalMem::Spsc::Queue<T> q_;
+    std::string name_;
+    join::ShmMem::Mpsc::Queue<T> q_;
 };
