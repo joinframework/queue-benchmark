@@ -101,9 +101,6 @@ def lib_color(name: str) -> str:
     return LIBRARY_COLORS[name]
 
 def bar_label_rotated(ax, bars, fmt, n_libs, base_fontsize):
-    # Horizontal value labels on adjacent bars overlap whenever their values
-    # are close, regardless of n_libs; rotating to vertical removes the
-    # overlap unconditionally once there's more than one bar per group.
     rotation = 90 if n_libs > 2 else 0
     fontsize = base_fontsize - 1 if n_libs > 2 else base_fontsize
     padding  = 8 if rotation else 3

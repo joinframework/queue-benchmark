@@ -60,7 +60,6 @@ static void BM_SPSC_Throughput (benchmark::State& state)
     state.SetLabel (std::string (Adapter::name));
 }
 
-// capacity : 256 / 4096 / 65536
 BENCHMARK (BM_SPSC_Throughput<BoostSPSC<int>>)
     ->Name ("SPSC/Throughput/Boost")
     ->Arg (256)
