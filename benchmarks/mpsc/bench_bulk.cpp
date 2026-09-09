@@ -22,9 +22,10 @@ static void BM_MPSC_Bulk (benchmark::State& state)
     const std::size_t items_per_producer = kNumItems / static_cast<std::size_t> (num_producers);
     const std::size_t total_items = items_per_producer * static_cast<std::size_t> (num_producers);
 
+    Adapter q (kQueueCap);
+
     for (auto _ : state)
     {
-        Adapter q (kQueueCap);
         std::atomic<std::size_t> total_consumed{0};
         std::barrier<> ready (num_producers + 1 + 1);
         std::barrier<> go (num_producers + 1 + 1);

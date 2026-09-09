@@ -20,9 +20,10 @@ static void BM_MPSC_Throughput (benchmark::State& state)
     const std::size_t items_per_producer = kNumItems / static_cast<std::size_t> (num_producers);
     const std::size_t total_items = items_per_producer * static_cast<std::size_t> (num_producers);
 
+    Adapter q (capacity);
+
     for (auto _ : state)
     {
-        Adapter q (capacity);
         std::barrier<> ready (num_producers + 1 + 1);
         std::barrier<> go (num_producers + 1 + 1);
 

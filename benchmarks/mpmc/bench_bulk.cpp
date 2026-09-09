@@ -24,9 +24,10 @@ static void BM_MPMC_Bulk (benchmark::State& state)
     const std::size_t total_items = items_per_producer * static_cast<std::size_t> (num_producers);
     const int total_threads = num_producers + num_consumers;
 
+    Adapter q (kQueueCap);
+
     for (auto _ : state)
     {
-        Adapter q (kQueueCap);
         std::atomic<std::size_t> total_consumed{0};
         std::barrier<> ready (total_threads + 1);
         std::barrier<> go (total_threads + 1);
