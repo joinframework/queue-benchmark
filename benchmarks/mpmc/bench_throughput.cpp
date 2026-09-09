@@ -23,9 +23,10 @@ static void BM_MPMC_Throughput (benchmark::State& state)
     const std::size_t items_per_producer = kNumItems / static_cast<std::size_t> (num_producers);
     const std::size_t total_items = items_per_producer * static_cast<std::size_t> (num_producers);
 
+    Adapter q (capacity);
+
     for (auto _ : state)
     {
-        Adapter q (capacity);
         std::atomic<std::size_t> total_consumed{0};
         const int total_threads = num_producers + num_consumers;
         std::barrier<> ready (total_threads + 1);

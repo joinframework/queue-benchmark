@@ -17,9 +17,10 @@ static void BM_SPSC_Throughput (benchmark::State& state)
 {
     const std::size_t capacity = static_cast<std::size_t> (state.range (0));
 
+    Adapter q (capacity);
+
     for (auto _ : state)
     {
-        Adapter q (capacity);
         std::barrier<> ready (3);
         std::barrier<> go (3);
 

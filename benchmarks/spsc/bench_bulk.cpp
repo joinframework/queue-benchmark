@@ -20,9 +20,10 @@ static void BM_SPSC_Bulk (benchmark::State& state)
     std::vector<int> push_buf (batch, 42);
     std::vector<int> pop_buf (batch);
 
+    Adapter q (kQueueCap);
+
     for (auto _ : state)
     {
-        Adapter q (kQueueCap);
         std::barrier<> ready (3);
         std::barrier<> go (3);
 
