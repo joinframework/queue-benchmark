@@ -10,25 +10,25 @@ public:
     static constexpr std::string_view name = "rigtorp::SPSCQueue";
 
     explicit RigtorpSPSC (std::size_t capacity)
-    : q_ (capacity)
+    : _q (capacity)
     {
     }
 
     bool push (T val)
     {
-        return q_.try_push (val);
+        return _q.try_push (val);
     }
 
     bool pop (T& val)
     {
-        T* ptr = q_.front ();
+        T* ptr = _q.front ();
         if (!ptr)
             return false;
         val = *ptr;
-        q_.pop ();
+        _q.pop ();
         return true;
     }
 
 private:
-    rigtorp::SPSCQueue<T> q_;
+    rigtorp::SPSCQueue<T> _q;
 };

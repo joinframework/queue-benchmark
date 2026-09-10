@@ -3,6 +3,7 @@
 #include <chrono>
 #include <cstdint>
 #include <fstream>
+#include <map>
 #include <numeric>
 #include <pthread.h>
 #include <set>
@@ -43,11 +44,65 @@ inline std::vector<int> physical_cores ()
     return result;
 }
 
-inline void pin_bench_thread (int idx) noexcept
+inline std::vector<int> cpu_order ()
+{
+    const int ncpus = static_cast<int> (std::thread::hardware_concurrency ());
+    std::vector<std::vector<int>> groups;
+    std::map<std::string, std::size_t> index;
+    for (int i = 0; i < ncpus; ++i)
+    {
+        std::string path = "/sys/devices/system/cpu/cpu" + std::to_string (i) + "/topology/thread_siblings_list";
+        std::ifstream f (path);
+        std::string siblings;
+        if (!f.is_open () || !std::getline (f, siblings))
+            siblings = std::to_string (i);
+        auto it = index.find (siblings);
+        if (it == index.end ())
+        {
+            index.emplace (siblings, groups.size ());
+            groups.push_back ({i});
+        }
+        else
+        {
+            groups[it->second].push_back (i);
+        }
+    }
+    std::vector<int> order;
+    order.reserve (static_cast<std::size_t> (ncpus));
+    for (std::size_t round = 0;; ++round)
+    {
+        bool any = false;
+        for (const auto& g : groups)
+        {
+            if (round < g.size ())
+            {
+                order.push_back (g[round]);
+                any = true;
+            }
+        }
+        if (!any)
+            break;
+    }
+    return order;
+}
+
+inline const std::vector<int>& bench_cores () noexcept
 {
     static const std::vector<int> cores = physical_cores ();
-    if (idx >= 0 && static_cast<std::size_t> (idx) < cores.size ())
-        pin_thread (cores[static_cast<std::size_t> (idx)]);
+    return cores;
+}
+
+inline const std::vector<int>& bench_cpus () noexcept
+{
+    static const std::vector<int> cpus = cpu_order ();
+    return cpus;
+}
+
+inline void pin_bench_thread (int idx) noexcept
+{
+    const auto& cpus = bench_cpus ();
+    if (idx >= 0 && static_cast<std::size_t> (idx) < cpus.size ())
+        pin_thread (cpus[static_cast<std::size_t> (idx)]);
 }
 
 inline void cpu_pause () noexcept

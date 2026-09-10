@@ -19,6 +19,12 @@ static void BM_MPSC_Throughput (benchmark::State& state)
     const std::size_t capacity = static_cast<std::size_t> (state.range (1));
     const std::size_t items_per_producer = kNumItems / static_cast<std::size_t> (num_producers);
     const std::size_t total_items = items_per_producer * static_cast<std::size_t> (num_producers);
+    const int nthreads = num_producers + 1;
+    if (nthreads > static_cast<int> (bench_cpus ().size ()))
+    {
+        state.SkipWithError ("not enough logical CPUs");
+        return;
+    }
 
     Adapter q (capacity);
 
@@ -66,6 +72,8 @@ static void BM_MPSC_Throughput (benchmark::State& state)
         consumer.join ();
         state.SetIterationTime (static_cast<double> (cycles_to_ns (rdtsc () - t0)) * 1e-9);
     }
+
+    state.counters["smt"] = benchmark::Counter (nthreads > static_cast<int> (bench_cores ().size ()) ? 1.0 : 0.0);
 
     state.SetItemsProcessed (state.iterations () * static_cast<int64_t> (kNumItems));
     state.SetLabel (std::string (Adapter::name));

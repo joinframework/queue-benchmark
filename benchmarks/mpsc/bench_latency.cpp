@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <atomic>
 #include <barrier>
 #include <chrono>
 #include <cstdint>
@@ -13,24 +14,38 @@
 #include "adapters/moodycamel_mpsc.hpp"
 #include "common/utils.hpp"
 
-static constexpr std::size_t kNumLatencyItems = 100'000;
+static constexpr std::size_t kNumLatencyItems = 50'000;
+
+static constexpr double kOfferedItemsPerSec = 1'000'000.0;
 
 template <typename Adapter>
 static void BM_MPSC_Latency (benchmark::State& state)
 {
     const int num_producers = static_cast<int> (state.range (0));
+    const int nthreads = num_producers + 1;
+    if (nthreads > static_cast<int> (bench_cpus ().size ()))
+    {
+        state.SkipWithError ("not enough logical CPUs");
+        return;
+    }
+
     const std::size_t capacity = static_cast<std::size_t> (state.range (1));
     const std::size_t items_per_producer = kNumLatencyItems / static_cast<std::size_t> (num_producers);
     const std::size_t total_items = items_per_producer * static_cast<std::size_t> (num_producers);
 
+    const std::uint64_t period = static_cast<std::uint64_t> (tsc_ghz () * 1e9 / kOfferedItemsPerSec * num_producers);
+
     std::vector<std::int64_t> latencies;
     latencies.reserve (total_items);
+
+    std::size_t last_dropped = 0;
 
     for (auto _ : state)
     {
         latencies.clear ();
 
         Adapter q (capacity);
+        std::atomic<std::size_t> dropped{0};
         std::barrier<> ready (num_producers + 1 + 1);
         std::barrier<> go (num_producers + 1 + 1);
 
@@ -42,11 +57,15 @@ static void BM_MPSC_Latency (benchmark::State& state)
                 pin_bench_thread (p);
                 ready.arrive_and_wait ();
                 go.arrive_and_wait ();
+                std::uint64_t next = rdtsc ();
                 for (std::size_t i = 0; i < items_per_producer; ++i)
                 {
-                    std::int64_t ts = static_cast<std::int64_t> (rdtsc ());
-                    while (!q.push (ts))
+                    next += period;
+                    while (rdtsc () < next)
                         cpu_pause ();
+                    std::int64_t ts = static_cast<std::int64_t> (rdtsc ());
+                    if (!q.push (ts))
+                        dropped.fetch_add (1, std::memory_order_relaxed);
                 }
             });
         }
@@ -57,7 +76,7 @@ static void BM_MPSC_Latency (benchmark::State& state)
             go.arrive_and_wait ();
             std::int64_t ts;
             std::size_t count = 0;
-            while (count < total_items)
+            while (count + dropped.load (std::memory_order_relaxed) < total_items)
             {
                 if (q.pop (ts))
                 {
@@ -77,7 +96,13 @@ static void BM_MPSC_Latency (benchmark::State& state)
         for (auto& t : producers)
             t.join ();
         consumer.join ();
+
+        last_dropped = dropped.load (std::memory_order_relaxed);
     }
+
+    state.counters["smt"] = benchmark::Counter (nthreads > static_cast<int> (bench_cores ().size ()) ? 1.0 : 0.0);
+
+    state.counters["dropped"] = benchmark::Counter (static_cast<double> (last_dropped));
 
     if (!latencies.empty ())
     {

@@ -13,6 +13,8 @@
 
 static constexpr std::size_t kNumItems = 1'000'000;
 static constexpr std::size_t kQueueCap = 4096;
+static constexpr std::size_t kPublishChunk = 64;
+static constexpr std::size_t kIdleCheck = 16;
 
 template <typename Adapter>
 static void BM_MPMC_Bulk (benchmark::State& state)
@@ -23,6 +25,11 @@ static void BM_MPMC_Bulk (benchmark::State& state)
     const std::size_t items_per_producer = kNumItems / static_cast<std::size_t> (num_producers);
     const std::size_t total_items = items_per_producer * static_cast<std::size_t> (num_producers);
     const int total_threads = num_producers + num_consumers;
+    if (total_threads > static_cast<int> (bench_cpus ().size ()))
+    {
+        state.SkipWithError ("not enough logical CPUs");
+        return;
+    }
 
     Adapter q (kQueueCap);
 
@@ -61,13 +68,35 @@ static void BM_MPMC_Bulk (benchmark::State& state)
                 std::vector<int> buf (batch);
                 ready.arrive_and_wait ();
                 go.arrive_and_wait ();
-                while (total_consumed.load (std::memory_order_relaxed) < total_items)
+                std::size_t local = 0;
+                std::size_t idle = 0;
+                bool running = true;
+                while (running)
                 {
                     std::size_t n = q.pop_bulk (buf.data (), batch);
                     if (n > 0)
-                        total_consumed.fetch_add (n, std::memory_order_relaxed);
+                    {
+                        local += n;
+                        if (local >= kPublishChunk)
+                        {
+                            running = total_consumed.fetch_add (local, std::memory_order_relaxed) + local < total_items;
+                            local = 0;
+                        }
+                    }
                     else
+                    {
+                        if (++idle == kIdleCheck)
+                        {
+                            if (local != 0)
+                            {
+                                total_consumed.fetch_add (local, std::memory_order_relaxed);
+                                local = 0;
+                            }
+                            running = total_consumed.load (std::memory_order_relaxed) < total_items;
+                            idle = 0;
+                        }
                         cpu_pause ();
+                    }
                 }
             });
         }
@@ -82,6 +111,8 @@ static void BM_MPMC_Bulk (benchmark::State& state)
             t.join ();
         state.SetIterationTime (static_cast<double> (cycles_to_ns (rdtsc () - t0)) * 1e-9);
     }
+
+    state.counters["smt"] = benchmark::Counter (total_threads > static_cast<int> (bench_cores ().size ()) ? 1.0 : 0.0);
 
     state.SetItemsProcessed (state.iterations () * static_cast<int64_t> (total_items));
     state.SetLabel (std::string (Adapter::name));

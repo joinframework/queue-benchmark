@@ -8,7 +8,7 @@
 
 #include "adapters/join_bulk_mpsc.hpp"
 #include "adapters/join_shm_bulk_mpsc.hpp"
-#include "adapters/moodycamel_bulk_mpmc.hpp"
+#include "adapters/moodycamel_bulk_mpsc.hpp"
 #include "common/utils.hpp"
 
 static constexpr std::size_t kNumItems = 1'000'000;
@@ -21,6 +21,12 @@ static void BM_MPSC_Bulk (benchmark::State& state)
     const std::size_t batch = static_cast<std::size_t> (state.range (1));
     const std::size_t items_per_producer = kNumItems / static_cast<std::size_t> (num_producers);
     const std::size_t total_items = items_per_producer * static_cast<std::size_t> (num_producers);
+    const int nthreads = num_producers + 1;
+    if (nthreads > static_cast<int> (bench_cpus ().size ()))
+    {
+        state.SkipWithError ("not enough logical CPUs");
+        return;
+    }
 
     Adapter q (kQueueCap);
 
@@ -75,6 +81,8 @@ static void BM_MPSC_Bulk (benchmark::State& state)
         state.SetIterationTime (static_cast<double> (cycles_to_ns (rdtsc () - t0)) * 1e-9);
     }
 
+    state.counters["smt"] = benchmark::Counter (nthreads > static_cast<int> (bench_cores ().size ()) ? 1.0 : 0.0);
+
     state.SetItemsProcessed (state.iterations () * static_cast<int64_t> (total_items));
     state.SetLabel (std::string (Adapter::name));
 }
@@ -86,6 +94,6 @@ BENCHMARK (BM_MPSC_Bulk<JoinBulkMPSC<int>>)->Name ("MPSC/Bulk/Join (Local)") MPS
 
 BENCHMARK (BM_MPSC_Bulk<JoinShmBulkMPSC<int>>)->Name ("MPSC/Bulk/Join (Shm)") MPSC_BULK_ARGS;
 
-BENCHMARK (BM_MPSC_Bulk<MoodycamelBulkMPMC<int>>)->Name ("MPSC/Bulk/Moodycamel") MPSC_BULK_ARGS;
+BENCHMARK (BM_MPSC_Bulk<MoodycamelBulkMPSC<int>>)->Name ("MPSC/Bulk/Moodycamel") MPSC_BULK_ARGS;
 
 BENCHMARK_MAIN ();

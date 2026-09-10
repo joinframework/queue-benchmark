@@ -10,20 +10,20 @@ public:
     static constexpr std::string_view name = "moodycamel::ReaderWriterQueue";
 
     explicit MoodycamelSPSC (std::size_t capacity)
-    : q_ (capacity)
+    : _q (capacity)
     {
     }
 
     bool push (T val)
     {
-        return q_.try_enqueue (val);
+        return _q.try_enqueue (val);
     }
 
     bool pop (T& val)
     {
-        return q_.try_dequeue (val);
+        return _q.try_dequeue (val);
     }
 
 private:
-    moodycamel::ReaderWriterQueue<T> q_;
+    moodycamel::ReaderWriterQueue<T> _q;
 };

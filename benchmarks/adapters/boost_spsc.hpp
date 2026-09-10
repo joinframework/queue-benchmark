@@ -10,20 +10,20 @@ public:
     static constexpr std::string_view name = "boost::lockfree::spsc_queue";
 
     explicit BoostSPSC (std::size_t capacity)
-    : q_ (capacity)
+    : _q (capacity)
     {
     }
 
     bool push (T val)
     {
-        return q_.push (val);
+        return _q.push (val);
     }
 
     bool pop (T& val)
     {
-        return q_.pop (val);
+        return _q.pop (val);
     }
 
 private:
-    boost::lockfree::spsc_queue<T> q_;
+    boost::lockfree::spsc_queue<T> _q;
 };

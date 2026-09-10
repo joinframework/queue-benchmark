@@ -14,11 +14,21 @@
 
 static constexpr std::size_t kNumItems = 1'000'000;
 
+static constexpr std::size_t kPublishChunk = 64;
+static constexpr std::size_t kIdleCheck = 16;
+
 template <typename Adapter>
 static void BM_MPMC_Throughput (benchmark::State& state)
 {
     const int num_producers = static_cast<int> (state.range (0));
     const int num_consumers = static_cast<int> (state.range (1));
+    const int nthreads = num_producers + num_consumers;
+    if (nthreads > static_cast<int> (bench_cpus ().size ()))
+    {
+        state.SkipWithError ("not enough logical CPUs");
+        return;
+    }
+
     const std::size_t capacity = static_cast<std::size_t> (state.range (2));
     const std::size_t items_per_producer = kNumItems / static_cast<std::size_t> (num_producers);
     const std::size_t total_items = items_per_producer * static_cast<std::size_t> (num_producers);
@@ -56,12 +66,33 @@ static void BM_MPMC_Throughput (benchmark::State& state)
                 ready.arrive_and_wait ();
                 go.arrive_and_wait ();
                 int val;
-                while (total_consumed.load (std::memory_order_relaxed) < total_items)
+                std::size_t local = 0;
+                std::size_t idle = 0;
+                bool running = true;
+                while (running)
                 {
                     if (q.pop (val))
-                        total_consumed.fetch_add (1, std::memory_order_relaxed);
+                    {
+                        if (++local == kPublishChunk)
+                        {
+                            running = total_consumed.fetch_add (local, std::memory_order_relaxed) + local < total_items;
+                            local = 0;
+                        }
+                    }
                     else
+                    {
+                        if (++idle == kIdleCheck)
+                        {
+                            if (local != 0)
+                            {
+                                total_consumed.fetch_add (local, std::memory_order_relaxed);
+                                local = 0;
+                            }
+                            running = total_consumed.load (std::memory_order_relaxed) < total_items;
+                            idle = 0;
+                        }
                         cpu_pause ();
+                    }
                 }
             });
         }
@@ -77,6 +108,7 @@ static void BM_MPMC_Throughput (benchmark::State& state)
         state.SetIterationTime (static_cast<double> (cycles_to_ns (rdtsc () - t0)) * 1e-9);
     }
 
+    state.counters["smt"] = benchmark::Counter (nthreads > static_cast<int> (bench_cores ().size ()) ? 1.0 : 0.0);
     state.SetItemsProcessed (state.iterations () * static_cast<int64_t> (kNumItems));
     state.SetLabel (std::string (Adapter::name));
 }

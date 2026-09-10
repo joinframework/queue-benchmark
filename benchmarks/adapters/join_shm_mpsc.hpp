@@ -11,27 +11,27 @@ public:
     static constexpr std::string_view name = "join::ShmMem::Mpsc::Queue";
 
     explicit JoinShmMPSC (std::size_t capacity)
-    : name_ (next_join_shm_name ())
-    , q_ (capacity, name_)
+    : _name (next_join_shm_name ())
+    , _q (capacity, _name)
     {
     }
 
     ~JoinShmMPSC ()
     {
-        join::ShmMem::unlink (name_);
+        join::ShmMem::unlink (_name);
     }
 
     bool push (T val)
     {
-        return q_.tryPush (val) == 0;
+        return _q.tryPush (val) == 0;
     }
 
     bool pop (T& val)
     {
-        return q_.tryPop (val) == 0;
+        return _q.tryPop (val) == 0;
     }
 
 private:
-    std::string name_;
-    join::ShmMem::Mpsc::Queue<T> q_;
+    std::string _name;
+    join::ShmMem::Mpsc::Queue<T> _q;
 };

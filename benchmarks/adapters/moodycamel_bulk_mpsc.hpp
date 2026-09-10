@@ -5,12 +5,12 @@
 #include <string_view>
 
 template <typename T>
-class MoodycamelBulkMPMC
+class MoodycamelBulkMPSC
 {
 public:
     static constexpr std::string_view name = "moodycamel::ConcurrentQueue";
 
-    explicit MoodycamelBulkMPMC (std::size_t cap)
+    explicit MoodycamelBulkMPSC (std::size_t cap)
     : _q (cap)
     {
     }
